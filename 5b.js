@@ -85,6 +85,8 @@ let levelName = new Array(levelCount);
 let mdao = new Array(levelCount);
 let mdao2 = 0;
 let levelProgress;
+var best;
+var prev;
 let bonusProgress;
 let bonusesCleared;
 let gotCoin;
@@ -124,6 +126,8 @@ const difficultyMap = [
 
 function clearVars() {
 	deathCount = timer = coins = bonusProgress = levelProgress = 0;
+	best = new Array(levelCount);
+	prev = new Array(levelCount);
 	bonusesCleared = new Array(33).fill(false);
 	gotCoin = new Array(levelCount).fill(false);
 }
@@ -137,6 +141,8 @@ function saveGame() {
 		saveLevelpackProgress();
 		return;
 	}
+	bfdia5b.setItem('timerMod.best', best.join(','));
+	bfdia5b.setItem('timerMod.prev', prev.join(','));
 	bfdia5b.setItem('gotCoin', gotCoin);
 	bfdia5b.setItem('coins', coins);
 	bfdia5b.setItem('levelProgress', levelProgress);
@@ -153,6 +159,8 @@ function getSavedGame() {
 		levelProgress = parseInt(bfdia5b.getItem('levelProgress'));
 		// bonusProgress = parseInt(bfdia5b.getItem('bonusProgress'));
 		bonusProgress = 0;
+		best = bfdia5b.getItem('timerMod.best')?.split(',').map(n => parseInt(n)) || new Array(levelCount);
+		prev = bfdia5b.getItem('timerMod.prev')?.split(',').map(n => parseInt(n)) || new Array(levelCount);
 		deathCount = parseInt(bfdia5b.getItem('deathCount'));
 		timer = parseFloat(bfdia5b.getItem('timer'));
 		gotCoin = new Array(levelCount);
@@ -2763,26 +2771,27 @@ function exitExploreLevel() {
 	cameraY = 0;
 }
 
-function drawMenu0Button(text, x, y, grayed, action, width = menu0ButtonSize.w) {
+function drawMenu0Button(text, x, y, grayed, action, width = menu0ButtonSize.w, height = menu0ButtonSize.h) {
 	let fill = '#ffffff';
 	if (!grayed) {
-		if (!lcPopUp && onRect(_xmouse, _ymouse, x, y, width, menu0ButtonSize.h)) {
+		if (!lcPopUp && onRect(_xmouse, _ymouse, x, y, width, height)) {
 			onButton = true;
 			if (!mouseIsDown) fill = '#d4d4d4';
-			if (onRect(lastClickX, lastClickY, x, y, width, menu0ButtonSize.h)) {
+			if (onRect(lastClickX, lastClickY, x, y, width, height)) {
 				if (mouseIsDown) fill = '#b8b8b8';
 				else if (mousePressedLastFrame) action();
 			}
 		}
 	} else fill = '#b8b8b8';
 
-	drawRoundedRect(fill, x, y, width, menu0ButtonSize.h, menu0ButtonSize.cr);
+	drawRoundedRect(fill, x, y, width, height, menu0ButtonSize.cr);
 
-	ctx.font = 'bold 30px Helvetica';
+	// timer mod: add auto scaling
+	ctx.font = `bold ${width/menu0ButtonSize.w * 30}px Helvetica`;
 	ctx.fillStyle = '#666666';
 	ctx.textAlign = 'center';
 	ctx.textBaseline = 'middle';
-	ctx.fillText(text, x + width / 2, y + (menu0ButtonSize.h * 1.1) / 2);
+	ctx.fillText(text, x + width / 2, y + (height * 1.1) / 2);
 }
 
 function drawMenu2_3Button(id, x, y, action) {
@@ -2808,34 +2817,57 @@ function drawMenu2_3Button(id, x, y, action) {
 	ctx.globalAlpha = 1;
 }
 
+var exitedLevelTime;
+var clearTime = 10000;
 function drawLevelButton(text, x, y, id, color) {
 	let fill = '#585858';
+	let newText;
+	let mouseHover = onRect(_xmouse, _ymouse + cameraY, x, y, levelButtonSize.w, levelButtonSize.h) && (_xmouse < 587 || _ymouse < 469);
 	if (color == 2) fill = '#ff8000';
 	else if (color == 3) fill = '#efe303';
 	else if (color == 4) fill = '#00cc00';
 	if (color > 1) {
-		if (
-			onRect(_xmouse, _ymouse + cameraY, x, y, levelButtonSize.w, levelButtonSize.h) &&
-			(_xmouse < 587 || _ymouse < 469)
-		) {
+		if (mouseHover) {
 			onButton = true;
 			if (mouseIsDown) {
 				if (color == 2) fill = '#d56a00';
 				else if (color == 3) fill = '#c6bc02';
 				else if (color == 4) fill = '#00a200';
 				levelButtonClicked = id;
+				if (bfdia5b.getItem('timerMod.showPrevTime') != 'true' && best[id]) clearTime -= 100;
 			} else {
 				if (color == 2) fill = '#ffaa55';
 				else if (color == 3) fill = '#ffff99';
 				else if (color == 4) fill = '#22ff22';
 			}
+			if (bfdia5b.getItem('timerMod.showPrevTime') == 'true' && prev[id]) newText = toHMS(prev[id]);
+			else if (best[id]) newText = toHMS(best[id]);
 		}
-		if (!mouseIsDown && levelButtonClicked === id) {
-			levelButtonClicked = -1;
-			if (id <= levelProgress) { // || (id > 99 && id < bonusProgress + 100)
-				playLevel(id);
-				whiteAlpha = 100;
+		if (levelButtonClicked === id) {
+			if (!mouseIsDown) {
+				levelButtonClicked = -1;
+				if (id <= levelProgress && clearTime > 6500) { // || (id > 99 && id < bonusProgress + 100)
+					playLevel(id);
+					whiteAlpha = 100;
+				}
+				clearTime = 10000;
 			}
+			if (clearTime <= 0) {
+				newText = best[id] = undefined;
+				saveGame();
+			}
+			ctx.globalAlpha = clearTime > 0 ? clearTime / 10000 : 1;
+		}
+	}
+
+	if (transitionType == 2 && id == currentLevel) {
+		if (!exitedLevelTime) exitedLevelTime = getTimer();
+		else if (getTimer() - exitedLevelTime >= 500 && !mouseHover) {
+			exitedLevelTime = undefined;
+			transitionType = 1;
+		} else {
+			newText = toHMS(prev[id]);
+			ctx.globalAlpha = 0.5;
 		}
 	}
 
@@ -2845,11 +2877,12 @@ function drawLevelButton(text, x, y, id, color) {
 	ctx.strokeStyle = '#000000';
 	ctx.strokeRect(x, y, levelButtonSize.w, levelButtonSize.h);
 
-	ctx.font = 'bold 41px Helvetica';
+	ctx.font = !newText ? 'bold 41px Helvetica' : '15px Helvetica';
 	ctx.fillStyle = '#000000';
 	ctx.textAlign = 'center';
 	ctx.textBaseline = 'middle';
-	ctx.fillText(text, x + levelButtonSize.w / 2, y + (levelButtonSize.h * 1.1) / 2);
+	ctx.fillText(!newText ? text : newText, x + levelButtonSize.w / 2, y + (levelButtonSize.h * 1.1) / 2);
+	ctx.globalAlpha = 1;
 }
 
 function drawNewGame2Button(text, x, y, color, action) {
@@ -3020,6 +3053,11 @@ function drawLevelMap() {
 		ctx.fillText(mdao[levelProgress - 1], 767.3, 85.4);
 		ctx.fillText((deathCount - mdao[levelProgress - 1]).toLocaleString(), 767.3, 116.8);
 	}
+	drawMenu0Button('CHANGE LAYOUT', 357.20, 105.00, false, () => (menuScreen = 12), 164.15, 23.20);
+	drawMenu0Button(`SHOWING: ${bfdia5b.getItem('timerMod.showPrevTime') == 'true' ? 'PREV' : 'BEST'}`, 357.20, 129.35, false,
+		() => bfdia5b.setItem('timerMod.showPrevTime', bfdia5b.getItem('timerMod.showPrevTime') != 'true'),
+		164.15, 23.20
+	);
 	for (let i = 0; i < (playingLevelpack?levelCount:133); i++) {
 		let j = i;
 		if (!playingLevelpack && j >= 100) j += 19;
@@ -3046,6 +3084,128 @@ function drawLevelButtons() {
 	ctx.font = 'bold 32px Helvetica';
 	ctx.fillText(currentLevelDisplayName, 12.85, 495.45);
 	drawMenu2_3Button(0, 837.5, 486.95, playMode == 3 ? exitExploreLevel : playMode == 2 ? exitTestLevel : menu3Menu);
+}
+function redrawTimerTexts(timer, best, total, x = 6, y = 6, scale = 0.7, alpha = 0.6) {
+	if (bfdia5b.getItem('timerMod.showTimer') == '0') return;
+	ctx.fillStyle = '#ffffff';
+	ctx.textAlign = 'left';
+	ctx.textBaseline = 'top';
+	ctx.font = `${20 * scale}px Helvetica`;
+	ctx.globalAlpha = alpha;
+	ctx.fillText('Timer:', x, y);
+	ctx.fillText('Best:', x, y + 34 * scale);
+	ctx.fillText('Total:', x, y + 34 * 2 * scale);
+	ctx.fillText(timer, x + 80 * scale, y);
+	ctx.fillText(best, x + 80 * scale, y + 34 * scale);
+	ctx.fillText(total, x + 80 * scale, y + 34 * 2 * scale);
+	ctx.globalAlpha = 1;
+}
+var keyCoordinateMatrix = {
+	90: [ [ 12.35, 17.00, 53.15, 52.40 ] ],
+	82: [ [ 86.10, 17.00, 53.15, 52.40 ] ],
+	32: [ [ -16.00, 74.00, 181.55, 53.00 ] ],
+	38: [ [ 240.00, 13.85, 58.10, 57.25 ] ],
+	37: [ [ 180.00, 72.75, 58.10, 57.25 ] ],
+	40: [ [ 240.00, 72.75, 58.10, 57.25 ] ],
+	39: [ [ 300.00, 72.75, 58.10, 57.25 ] ],
+	13: [ [ 364.65, 17.00, 13.90, 38.00 ], [ 377.65, 17.00, 49.40, 92.10 ] ]
+};
+function redrawLevelKeys(keys = [], x = 695, y = 3, scale = 0.6, alpha = 0.45) {
+	if (bfdia5b.getItem('timerMod.showKeys') == '0') return;
+	
+	ctx.globalAlpha = alpha;
+	for (var key of Object.keys(keyCoordinateMatrix)) {
+		ctx.fillStyle = _keysDown[key] ? '#0033CC' : '#666666';
+		if (key == 13 && _keysDown[16]) ctx.fillStyle = '#0033CC';
+		var coords = keyCoordinateMatrix[key];
+		for (var coord of coords) ctx.fillRect(x + coord[0] * scale, y + coord[1] * scale, coord[2] * scale, coord[3] * scale);
+	}
+	ctx.fillStyle = '#000000';
+	ctx.textAlign = 'center';
+	ctx.font = `${32 * scale}px Helvetica`;
+	ctx.fillText(keys[0], x + 13.35 * scale + 53.15/2 * scale, y + 26.00 * scale);
+	ctx.fillText(keys[1], x + 87.10 * scale + 53.15/2 * scale, y + 26.00 * scale);
+	ctx.fillText(keys[2], x - 15.00 * scale + 181.55/2 * scale, y + 85.00 * scale);
+	ctx.fillText(keys[3], x + 241.00 * scale + 58.10/2 * scale, y + 24.85 * scale);
+	ctx.fillText(keys[4], x + 181.00 * scale + 58.10/2 * scale, y + 83.75 * scale);
+	ctx.fillText(keys[5], x + 241.00 * scale + 58.10/2 * scale, y + 83.75 * scale);
+	ctx.fillText(keys[6], x + 301.00 * scale + 58.10/2 * scale, y + 83.75 * scale);
+	ctx.fillText(keys[7], x + 377.65 * scale + 49.40/2 * scale, y + 58.00 * scale);
+	ctx.globalAlpha = 1;
+}
+
+var levelTimerOffset, levelKeysOffset;
+var lastHover = 't';
+var tPress = false, yPress = false;
+function runLayoutEditor() {
+	ctx.fillStyle = '#999966';
+	ctx.fillRect(0, 0, cwidth, cheight);
+	currentLevelDisplayName = 'Drag to organize; R to reset';
+	drawLevelButtons();
+
+	if (_keysDown[82]) {
+		bfdia5b.setItem('timerMod.showTimer', 1);
+		bfdia5b.setItem('timerMod.showKeys', 1);
+		bfdia5b.setItem('timerMod.levelTimerPos', '6,6');
+		bfdia5b.setItem('timerMod.levelTimerScale', '0.7');
+		bfdia5b.setItem('timerMod.levelTimerAlpha', '0.6');
+		bfdia5b.setItem('timerMod.levelKeysPos', '695,3');
+		bfdia5b.setItem('timerMod.levelKeysScale', '0.6');
+		bfdia5b.setItem('timerMod.levelKeysAlpha', '0.45');
+		levelTimerOffset = undefined;
+	}
+	if ((_keysDown[84] || (tPress = false)) && !tPress && (tPress = true)) bfdia5b.setItem('timerMod.showTimer', +!+(bfdia5b.getItem('timerMod.showTimer') || 1));
+	if ((_keysDown[89] || (yPress = false)) && !yPress && (yPress = true)) bfdia5b.setItem('timerMod.showKeys', +!+(bfdia5b.getItem('timerMod.showKeys') || 1));
+
+	var levelTimerX = parseFloat(bfdia5b.getItem('timerMod.levelTimerPos')?.split(',')[0]) || 6;
+	var levelTimerY = parseFloat(bfdia5b.getItem('timerMod.levelTimerPos')?.split(',')[1]) || 6;
+	var levelTimerScale = parseFloat(bfdia5b.getItem('timerMod.levelTimerScale')) || 0.7;
+	var levelTimerAlpha = parseFloat(bfdia5b.getItem('timerMod.levelTimerAlpha')) || 0.6;
+	var timerHover = onRect(_xmouse, _ymouse, levelTimerX, levelTimerY, 226 * levelTimerScale, 95 * levelTimerScale);
+	var levelKeysX = parseFloat(bfdia5b.getItem('timerMod.levelKeysPos')?.split(',')[0]) || 695;
+	var levelKeysY = parseFloat(bfdia5b.getItem('timerMod.levelKeysPos')?.split(',')[1]) || 3;
+	var levelKeysScale = parseFloat(bfdia5b.getItem('timerMod.levelKeysScale')) || 0.6;
+	var levelKeysAlpha = parseFloat(bfdia5b.getItem('timerMod.levelKeysAlpha')) || 0.45;
+	var keysHover = onRect(_xmouse, _ymouse, levelKeysX - 16, levelKeysY, 459.00 * levelKeysScale, 130.00 * levelKeysScale);
+	onScrollbar = timerHover || keysHover;
+	if (timerHover && !keysHover && !draggingScrollbar) lastHover = 't';
+	else if (keysHover && !timerHover && !draggingScrollbar) lastHover = 'k';
+
+	if (((timerHover && !keysHover) || draggingScrollbar) && lastHover == 't') {
+		if (!levelTimerOffset) levelTimerOffset = [ (_xmouse - levelTimerX) / levelTimerScale, (_ymouse - levelTimerY) / levelTimerScale ];
+
+		if (_keysDown[38]) levelTimerScale += 0.05;
+		else if (_keysDown[40]) levelTimerScale = Math.max(0.1, levelTimerScale - 0.05);
+		if (_keysDown[39]) levelTimerAlpha = Math.min(1, levelTimerAlpha + 0.05);
+		else if (_keysDown[37]) levelTimerAlpha = Math.max(0.1, levelTimerAlpha - 0.05);
+
+		if ((mouseIsDown && (draggingScrollbar = true)) || _keysDown[38] || _keysDown[40]) {
+			levelTimerX = _xmouse - levelTimerOffset[0] * levelTimerScale;
+			levelTimerY = _ymouse - levelTimerOffset[1] * levelTimerScale;
+		} else levelTimerOffset = draggingScrollbar = false;
+	}
+	redrawTimerTexts('[T to hide]', '[↑/↓ to scale]', '[←/→ opacity]', levelTimerX, levelTimerY, levelTimerScale, levelTimerAlpha * (timerHover ? (mouseIsDown ? 0.5 : 0.75) : 1));
+	bfdia5b.setItem('timerMod.levelTimerPos', `${levelTimerX.toFixed(3)},${levelTimerY.toFixed(3)}`);
+	bfdia5b.setItem('timerMod.levelTimerScale', levelTimerScale.toFixed(2));
+	bfdia5b.setItem('timerMod.levelTimerAlpha', levelTimerAlpha.toFixed(2));
+
+	if (((keysHover && !timerHover) || draggingScrollbar) && lastHover == 'k') {
+		if (!levelKeysOffset) levelKeysOffset = [ (_xmouse - levelKeysX) / levelKeysScale, (_ymouse - levelKeysY) / levelKeysScale ];
+
+		if (_keysDown[38]) levelKeysScale += 0.05;
+		else if (_keysDown[40]) levelKeysScale = Math.max(0.1, levelKeysScale - 0.05);
+		if (_keysDown[39]) levelKeysAlpha = Math.min(1, levelKeysAlpha + 0.05);
+		else if (_keysDown[37]) levelKeysAlpha = Math.max(0.1, levelKeysAlpha - 0.05);
+
+		if ((mouseIsDown && (draggingScrollbar = true)) || _keysDown[38] || _keysDown[40]) {
+			levelKeysX = _xmouse - levelKeysOffset[0] * levelKeysScale
+			levelKeysY = _ymouse - levelKeysOffset[1] * levelKeysScale;
+		} else levelKeysOffset = draggingScrollbar = false;
+	}
+	redrawLevelKeys([ '', '', '[Y to hide]', '', '', '', '', '' ], levelKeysX, levelKeysY, levelKeysScale, levelKeysAlpha * (keysHover ? (mouseIsDown ? 0.5 : 0.75) : 1));
+	bfdia5b.setItem('timerMod.levelKeysPos', `${levelKeysX.toFixed(3)},${levelKeysY.toFixed(3)}`);
+	bfdia5b.setItem('timerMod.levelKeysScale', levelKeysScale.toFixed(2));
+	bfdia5b.setItem('timerMod.levelKeysAlpha', levelKeysAlpha.toFixed(2));
 }
 
 //https://thewebdev.info/2021/05/15/how-to-add-line-breaks-into-the-html5-canvas-with-filltext/
@@ -7678,7 +7838,8 @@ function draw() {
 			if (wipeTimer == 30) {
 				if (transitionType == 0) {
 					// resetting preexisting level
-					if (!quirksMode) timer += getTimer() - levelTimer2;
+					// timer mod: took this OUT of quirks mode
+					timer += getTimer() - levelTimer2;
 					resetLevel();
 				} else if (charsAtEnd >= charCount2) {
 					// beat the level!
@@ -7688,6 +7849,8 @@ function draw() {
 						// bonusProgress = Math.floor(coins * 0.33);
 					}
 					timer += getTimer() - levelTimer2;
+					best[currentLevel] = Math.min(best[currentLevel] || Infinity, (getTimer() - levelTimer2).toFixed(0));
+					prev[currentLevel] = (getTimer() - levelTimer2).toFixed(0);
 					if (playMode == 0) {
 						currentLevel++;
 						if (!quirksMode) toSeeCS = true; // This line was absent in the original source, but without it dialogue doesn't play after level 1 when on a normal playthrough.
@@ -10122,6 +10285,9 @@ function draw() {
 			if (lcPopUpNextFrame) lcPopUp = true;
 			lcPopUpNextFrame = false;
 			break;
+		case 12:
+			runLayoutEditor();
+			break;
 	}
 
 	if (levelTimer <= 30 || menuScreen != 3) {
@@ -10140,6 +10306,25 @@ function draw() {
 		if (cutScene == 1 || cutScene == 2) {
 			drawCutScene();
 		}
+
+		var levelTimerX = parseFloat(bfdia5b.getItem('timerMod.levelTimerPos')?.split(',')[0]) || 6;
+		var levelTimerY = parseFloat(bfdia5b.getItem('timerMod.levelTimerPos')?.split(',')[1]) || 6;
+		var levelTimerScale = parseFloat(bfdia5b.getItem('timerMod.levelTimerScale')) || 0.7;
+		var levelTimerAlpha = parseFloat(bfdia5b.getItem('timerMod.levelTimerAlpha')) || 0.6;
+		var levelKeysX = parseFloat(bfdia5b.getItem('timerMod.levelKeysPos')?.split(',')[0]) || 695;
+		var levelKeysY = parseFloat(bfdia5b.getItem('timerMod.levelKeysPos')?.split(',')[1]) || 3;
+		var levelKeysScale = parseFloat(bfdia5b.getItem('timerMod.levelKeysScale')) || 0.6;
+		var levelKeysAlpha = parseFloat(bfdia5b.getItem('timerMod.levelKeysAlpha')) || 0.45;
+		if ((_keysDown[84] || (tPress = false)) && !tPress && (tPress = true)) bfdia5b.setItem('timerMod.showTimer', +!+(bfdia5b.getItem('timerMod.showTimer') || 1));
+		if ((_keysDown[89] || (yPress = false)) && !yPress && (yPress = true)) bfdia5b.setItem('timerMod.showKeys', +!+(bfdia5b.getItem('timerMod.showKeys') || 1));
+		redrawTimerTexts(
+			toHMS(getTimer() - levelTimer2), toHMS(best[currentLevel] || getTimer() - levelTimer2), toHMS(timer + getTimer() - levelTimer2),
+			levelTimerX, levelTimerY, levelTimerScale, levelTimerAlpha
+		);
+		redrawLevelKeys(
+			[ 'z', 'r', '', '↑', '←', '↓', '→', '⏎' ],
+			levelKeysX, levelKeysY, levelKeysScale, levelKeysAlpha
+		);
 		drawLevelButtons();
 		if (menuScreen != 3) {
 			cameraX = 0;
