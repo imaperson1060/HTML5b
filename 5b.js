@@ -43,6 +43,7 @@ let _xmouse = 0;
 let _ymouse = 0;
 let _pxmouse = 0;
 let _pymouse = 0;
+let allTouchPoints = [];
 let lastClickX = 0;
 let lastClickY = 0;
 let valueAtClick = 0;
@@ -2763,26 +2764,26 @@ function exitExploreLevel() {
 	cameraY = 0;
 }
 
-function drawMenu0Button(text, x, y, grayed, action, width = menu0ButtonSize.w) {
+function drawMenu0Button(text, x, y, grayed, action, width = menu0ButtonSize.w, height = menu0ButtonSize.h) {
 	let fill = '#ffffff';
 	if (!grayed) {
-		if (!lcPopUp && onRect(_xmouse, _ymouse, x, y, width, menu0ButtonSize.h)) {
+		if (!lcPopUp && onRect(_xmouse, _ymouse, x, y, width, height)) {
 			onButton = true;
 			if (!mouseIsDown) fill = '#d4d4d4';
-			if (onRect(lastClickX, lastClickY, x, y, width, menu0ButtonSize.h)) {
+			if (onRect(lastClickX, lastClickY, x, y, width, height)) {
 				if (mouseIsDown) fill = '#b8b8b8';
 				else if (mousePressedLastFrame) action();
 			}
 		}
 	} else fill = '#b8b8b8';
 
-	drawRoundedRect(fill, x, y, width, menu0ButtonSize.h, menu0ButtonSize.cr);
+	drawRoundedRect(fill, x, y, width, height, menu0ButtonSize.cr);
 
-	ctx.font = 'bold 30px Helvetica';
+	ctx.font = `bold ${width/menu0ButtonSize.w * 30}px Helvetica`;
 	ctx.fillStyle = '#666666';
 	ctx.textAlign = 'center';
 	ctx.textBaseline = 'middle';
-	ctx.fillText(text, x + width / 2, y + (menu0ButtonSize.h * 1.1) / 2);
+	ctx.fillText(text, x + width / 2, y + (height * 1.1) / 2);
 }
 
 function drawMenu2_3Button(id, x, y, action) {
@@ -3020,6 +3021,11 @@ function drawLevelMap() {
 		ctx.fillText(mdao[levelProgress - 1], 767.3, 85.4);
 		ctx.fillText((deathCount - mdao[levelProgress - 1]).toLocaleString(), 767.3, 116.8);
 	}
+	drawMenu0Button(`CONTROLS: ${bfdia5b.getItem('mobileControls.use') != 'false' ? '✔' : 'X'}`, 357.20, 105.00, false,
+		() => bfdia5b.setItem('mobileControls.use', bfdia5b.getItem('mobileControls.use') == 'false'),
+		164.15, 23.20
+	);
+	if (bfdia5b.getItem('mobileControls.use') != 'false') drawMenu0Button('CHANGE LAYOUT', 357.20, 129.35, false, () => (menuScreen = 12), 164.15, 23.20);
 	for (let i = 0; i < (playingLevelpack?levelCount:133); i++) {
 		let j = i;
 		if (!playingLevelpack && j >= 100) j += 19;
@@ -3046,6 +3052,81 @@ function drawLevelButtons() {
 	ctx.font = 'bold 32px Helvetica';
 	ctx.fillText(currentLevelDisplayName, 12.85, 495.45);
 	drawMenu2_3Button(0, 837.5, 486.95, playMode == 3 ? exitExploreLevel : playMode == 2 ? exitTestLevel : menu3Menu);
+}
+var keyCoordinateMatrix = {
+	90: [ [ 12.35, 17.00, 53.15, 52.40 ] ],
+	82: [ [ 86.10, 17.00, 53.15, 52.40 ] ],
+	32: [ [ -16.00, 74.00, 181.55, 53.00 ] ],
+	38: [ [ 240.00, 13.85, 58.10, 57.25 ] ],
+	37: [ [ 180.00, 72.75, 58.10, 57.25 ] ],
+	40: [ [ 240.00, 72.75, 58.10, 57.25 ] ],
+	39: [ [ 300.00, 72.75, 58.10, 57.25 ] ],
+	13: [ [ 364.65, 17.00, 13.90, 38.00 ], [ 377.65, 17.00, 49.40, 92.10 ] ]
+};
+function redrawLevelKeys(keys = [], x = 274, y = 356, scale = 1, alpha = 0.4) {
+	if (bfdia5b.getItem('mobileControls.use') == 'false') return;
+	ctx.globalAlpha = alpha;
+	for (var key of Object.keys(keyCoordinateMatrix)) {
+		ctx.fillStyle = _keysDown[key] ? '#0033CC' : '#666666';
+		if (key == 13 && _keysDown[16]) ctx.fillStyle = '#0033CC';
+		var coords = keyCoordinateMatrix[key];
+		for (var coord of coords) {
+			let checkTouch = false;
+			for (var touch of allTouchPoints)
+				if (onRect(touch[0], touch[1], x + coord[0] * scale, y + coord[1] * scale, coord[2] * scale, coord[3] * scale)) checkTouch = true;
+			_keysDown[key] = checkTouch || (onRect(_xmouse, _ymouse, x + coord[0] * scale, y + coord[1] * scale, coord[2] * scale, coord[3] * scale) && mouseIsDown);
+			ctx.fillRect(x + coord[0] * scale, y + coord[1] * scale, coord[2] * scale, coord[3] * scale);
+		}
+	}
+	ctx.fillStyle = '#000000';
+	ctx.textAlign = 'center';
+	ctx.font = `${32 * scale}px Helvetica`;
+	ctx.fillText(keys[0], x + 13.35 * scale + 53.15/2 * scale, y + 26.00 * scale);
+	ctx.fillText(keys[1], x + 87.10 * scale + 53.15/2 * scale, y + 26.00 * scale);
+	ctx.fillText(keys[2], x - 15.00 * scale + 181.55/2 * scale, y + 85.00 * scale);
+	ctx.fillText(keys[3], x + 241.00 * scale + 58.10/2 * scale, y + 24.85 * scale);
+	ctx.fillText(keys[4], x + 181.00 * scale + 58.10/2 * scale, y + 83.75 * scale);
+	ctx.fillText(keys[5], x + 241.00 * scale + 58.10/2 * scale, y + 83.75 * scale);
+	ctx.fillText(keys[6], x + 301.00 * scale + 58.10/2 * scale, y + 83.75 * scale);
+	ctx.fillText(keys[7], x + 377.65 * scale + 49.40/2 * scale, y + 58.00 * scale);
+	ctx.globalAlpha = 1;
+}
+
+var levelKeysOffset;
+function runLayoutEditor() {
+	ctx.fillStyle = '#999966';
+	ctx.fillRect(0, 0, cwidth, cheight);
+	currentLevelDisplayName = 'Drag ✥ to organize; R to reset';
+	drawLevelButtons();
+
+	if (_keysDown[82]) {
+		bfdia5b.setItem('mobileControls.levelKeysPos', '274,356');
+		bfdia5b.setItem('mobileControls.levelKeysScale', '1');
+		bfdia5b.setItem('mobileControls.levelKeysAlpha', '0.4');
+	}
+
+	var levelKeysX = parseFloat(bfdia5b.getItem('mobileControls.levelKeysPos')?.split(',')[0]) || 274;
+	var levelKeysY = parseFloat(bfdia5b.getItem('mobileControls.levelKeysPos')?.split(',')[1]) || 356;
+	var levelKeysScale = parseFloat(bfdia5b.getItem('mobileControls.levelKeysScale')) || 1;
+	var levelKeysAlpha = parseFloat(bfdia5b.getItem('mobileControls.levelKeysAlpha')) || 0.4;
+	var keysHover = onScrollbar = onRect(_xmouse, _ymouse, levelKeysX - 16, levelKeysY, 459.00 * levelKeysScale, 130.00 * levelKeysScale);
+	if (keysHover || draggingScrollbar) {
+		if (!levelKeysOffset) levelKeysOffset = [ (_xmouse - levelKeysX) / levelKeysScale, (_ymouse - levelKeysY) / levelKeysScale ];
+
+		if (_keysDown[38]) levelKeysScale += 0.05;
+		else if (_keysDown[40]) levelKeysScale = Math.max(0.1, levelKeysScale - 0.05);
+		if (_keysDown[39]) levelKeysAlpha = Math.min(1, levelKeysAlpha + 0.05);
+		else if (_keysDown[37]) levelKeysAlpha = Math.max(0.1, levelKeysAlpha - 0.05);
+
+		if ((mouseIsDown && (draggingScrollbar = true)) || _keysDown[38] || _keysDown[40]) {
+			levelKeysX = _xmouse - levelKeysOffset[0] * levelKeysScale
+			levelKeysY = _ymouse - levelKeysOffset[1] * levelKeysScale;
+		} else levelKeysOffset = draggingScrollbar = false;
+	}
+	redrawLevelKeys([ '', 'r', '', '↑', '←', '↓', '→', '✥' ], levelKeysX, levelKeysY, levelKeysScale, levelKeysAlpha * (keysHover ? (mouseIsDown ? 0.5 : 0.75) : 1));
+	bfdia5b.setItem('mobileControls.levelKeysPos', `${levelKeysX.toFixed(3)},${levelKeysY.toFixed(3)}`);
+	bfdia5b.setItem('mobileControls.levelKeysScale', levelKeysScale.toFixed(2));
+	bfdia5b.setItem('mobileControls.levelKeysAlpha', levelKeysAlpha.toFixed(2));
 }
 
 //https://thewebdev.info/2021/05/15/how-to-add-line-breaks-into-the-html5-canvas-with-filltext/
@@ -7226,6 +7307,7 @@ function createNewLevelpack() {
 function touchstart(event) {
 	event.preventDefault();
 	touchCount++;
+	updateTouches(event);
 	mousemove(event.changedTouches[0]);
 	mousedown(event);
 }
@@ -7233,18 +7315,25 @@ function touchstart(event) {
 function touchend(event) {
 	event.preventDefault();
 	touchCount--;
+	updateTouches(event);
 	if (touchCount == 0) mouseup(event);
 }
 
 function touchcancel(event) {
 	event.preventDefault();
 	touchCount--;
+	updateTouches(event);
 	if (touchCount == 0) mouseIsDown = false;
 }
 
 function touchmove(event) {
 	event.preventDefault();
+	updateTouches(event);
 	mousemove(event.changedTouches[0]);
+}
+
+function updateTouches(event) {
+	allTouchPoints = [...event.touches].map(touch => ([ touch.pageX*addedZoom - canvasReal.getBoundingClientRect().left, touch.pageY*addedZoom - canvasReal.getBoundingClientRect().top ]));
 }
 
 function mousemove(event) {
@@ -7591,10 +7680,10 @@ function setup() {
 	window.addEventListener('keydown', keydown);
 	window.addEventListener('keyup', keyup);
 	if (isMobile) {
-		window.addEventListener('touchstart', touchstart);
-		window.addEventListener('touchend', touchend);
-		window.addEventListener('touchcancel', touchcancel);
-		window.addEventListener('touchmove', touchmove);
+		window.addEventListener('touchstart', touchstart, { passive: false });
+		window.addEventListener('touchend', touchend, { passive: false });
+		window.addEventListener('touchcancel', touchcancel, { passive: false });
+		window.addEventListener('touchmove', touchmove, { passive: false });
 	}
 	canvas.addEventListener('paste', handlePaste);
 
@@ -10122,6 +10211,9 @@ function draw() {
 			if (lcPopUpNextFrame) lcPopUp = true;
 			lcPopUpNextFrame = false;
 			break;
+		case 12:
+			runLayoutEditor();
+			break;
 	}
 
 	if (levelTimer <= 30 || menuScreen != 3) {
@@ -10140,6 +10232,15 @@ function draw() {
 		if (cutScene == 1 || cutScene == 2) {
 			drawCutScene();
 		}
+
+		var levelKeysX = parseFloat(bfdia5b.getItem('mobileControls.levelKeysPos')?.split(',')[0]) || 274;
+		var levelKeysY = parseFloat(bfdia5b.getItem('mobileControls.levelKeysPos')?.split(',')[1]) || 356;
+		var levelKeysScale = parseFloat(bfdia5b.getItem('mobileControls.levelKeysScale')) || 1;
+		var levelKeysAlpha = parseFloat(bfdia5b.getItem('mobileControls.levelKeysAlpha')) || 0.4;
+		redrawLevelKeys(
+			[ 'z', 'r', '', '↑', '←', '↓', '→', '⏎' ],
+			levelKeysX, levelKeysY, levelKeysScale, levelKeysAlpha
+		);
 		drawLevelButtons();
 		if (menuScreen != 3) {
 			cameraX = 0;
